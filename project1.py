@@ -1,67 +1,113 @@
+import sys
 import cv2
 import numpy as np
-frameWidth = 640
-frameHeight = 480
-cap = cv2.VideoCapture(1)
-cap.set(3, frameWidth)
-cap.set(4, frameHeight)
-cap.set(10,150)
-
-myColors = [[5,107,0,19,255,255],
-            [133,56,0,159,156,255],
-            [57,76,0,100,255,255],
-            [90,48,0,118,255,255]]
-myColorValues = [[51,153,255],          ## BGR
-                 [255,0,255],
-                 [0,255,0],
-                 [255,0,0]]
-
-myPoints =  []  ## [x , y , colorId ]
-
-def findColor(img,myColors,myColorValues):
-    imgHSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    count = 0
-    newPoints=[]
-    for color in myColors:
-        lower = np.array(color[0:3])
-        upper = np.array(color[3:6])
-        mask = cv2.inRange(imgHSV,lower,upper)
-        x,y=getContours(mask)
-        cv2.circle(imgResult,(x,y),15,myColorValues[count],cv2.FILLED)
-        if x!=0 and y!=0:
-            newPoints.append([x,y,count])
-        count +=1
-        #cv2.imshow(str(color[0]),mask)
-    return newPoints
-
-def getContours(img):
-    contours,hierarchy = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-    x,y,w,h = 0,0,0,0
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area>500:
-            #cv2.drawContours(imgResult, cnt, -1, (255, 0, 0), 3)
-            peri = cv2.arcLength(cnt,True)
-            approx = cv2.approxPolyDP(cnt,0.02*peri,True)
-            x, y, w, h = cv2.boundingRect(approx)
-    return x+w//2,y
-
-def drawOnCanvas(myPoints,myColorValues):
-    for point in myPoints:
-        cv2.circle(imgResult, (point[0], point[1]), 10, myColorValues[point[2]], cv2.FILLED)
+from PyQt5.QtWidgets import *
+from PyQt5 import QtGui
+from PyQt5 import QtCore
 
 
-while True:
-    success, img = cap.read()
-    imgResult = img.copy()
-    newPoints = findColor(img, myColors,myColorValues)
-    if len(newPoints)!=0:
-        for newP in newPoints:
-            myPoints.append(newP)
-    if len(myPoints)!=0:
-        drawOnCanvas(myPoints,myColorValues)
+
+from PyQt5 import uic
+
+form_window = uic.loadUiType('./mainwidget.ui')[0]
+
+class Exam(QWidget, form_window):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+        self.CIRCLE = 0
+        self.RECTANGLE = 1
+        self.ELLIPSE = 2
+        self.paintcolor = (255, 0, 0)
+        self.brush = 2
+        self.setWindowTitle('painter Ver 1.0.0')
+        self.setMouseTracking(True)
+        self.figure = self.CIRCLE
+        self.start_pos = None
+        self.radius = 3
+        self.src = np.full((500, 500, 3), 255, dtype=np.uint8)
+        self.img_to_label(self.src)
+        self.btn_red.clicked.connect(self.setRed)
+        self.btn_blue.clicked.connect(self.setBlue)
+        self.btn_green.clicked.connect(self.setGreen)
+        self.cmb_figure.currentIndexChanged.connect(self.setFigure)
+        self.btn_color.clicked.connect(self.user_color)
+        self.sb_thickness.valueChanged.connect(self.user_brush)
+
+    def user_brush(self, thick):
+        self.brush = thick
+
+    def user_color(self):
+        p_color = QColorDialog.getColor()
+        self.paintcolor = (p_color.red(), p_color.green(), p_color.blue())
+
+    def setFigure(self):
+        figure = self.cmb_figure.currentText()
+        if figure == 'Circle':
+            self.figure = self.CIRCLE
+        elif figure == 'Rectangle':
+            self.figure = self.RECTANGLE
+
+        elif figure == 'Ellipse':
+            self.figure = self.ELLIPSE
+    def setRed(self):
+        self.paintcolor = (255, 0, 0)
+    def setBlue(self):
+        self.paintcolor = (0, 0, 255)
+    def setGreen(self):
+        self.paintcolor = (0, 255, 0)
+
+    def img_to_label(self, src):
+        h, w, c = self.src.shape
+        qImg = QtGui.QImage(src, w, h, w * c, QtGui.QImage.Format_RGB888)
+        pixmap = QtGui.QPixmap.fromImage(qImg)
+        self.lbl_img.setPixmap(pixmap)
+    def mousePressEvent(self, e):  # e ; QMouseEvent
+        if e.buttons() & QtCore.Qt.LeftButton:
+            self.start_pos = (e.x(), e.y())
+
+    def mouseMoveEvent(self, e):  # e ; QMouseEvent
+        if isinstance(self.start_pos, tuple):
+            new_img = self.src.copy()
+            if self.figure == self.CIRCLE:
+                cv2.circle(new_img, self.start_pos,
+                       max(abs(self.start_pos[0]-e.x()), abs(self.start_pos[1]-e.y())),
+                       self.paintcolor, self.brush)
+            elif self.figure == self.RECTANGLE:
+                cv2.rectangle(new_img, self.start_pos,
+                       (e.x(), e.y()),
+                       self.paintcolor, self.brush)
+            elif self.figure == self.ELLIPSE:
+                cv2.ellipse(new_img,
+                ((self.start_pos[0] - (self.start_pos[0] - e.x()) // 2,
+                 self.start_pos[1] - (self.start_pos[1] - e.y()) // 2),
+                (abs(self.start_pos[0]-e.x()), abs(self.start_pos[1]-e.y())), 0),
+                     self.paintcolor, self.brush)
+            self.img_to_label(new_img)
 
 
-    cv2.imshow("Result", imgResult)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    def mouseReleaseEvent(self, e):
+
+        if self.figure == self.CIRCLE:
+            cv2.circle(self.src, self.start_pos,
+                   max(abs(self.start_pos[0] - e.x()), abs(self.start_pos[1] - e.y())),
+                   self.paintcolor, self.brush)
+        elif self.figure == self.RECTANGLE:
+            cv2.rectangle(self.src, self.start_pos,
+                          (e.x(), e.y()),
+                          self.paintcolor, self.brush)
+        elif self.figure == self.ELLIPSE:
+                cv2.ellipse(self.src,
+                ((self.start_pos[0]-(self.start_pos[0]-e.x())//2,
+                  self.start_pos[1]-(self.start_pos[1]-e.y())//2),
+                (abs(self.start_pos[0]-e.x()), abs(self.start_pos[1]-e.y())), 0),
+                        self.paintcolor, self.brush)
+        self.img_to_label(self.src)
+        self.start_pos = None
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    mainWindow = Exam()
+    mainWindow.show()
+    sys.exit(app.exec_())

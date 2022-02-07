@@ -7,7 +7,7 @@ widthImg=540
 heightImg =640
 #####################################
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cap.set(10,150)
 
 
@@ -23,7 +23,7 @@ def preProcessing(img):
 def getContours(img):
     biggest = np.array([])
     maxArea = 0
-    contours,hierarchy = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    _, contours,hierarchy = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
     for cnt in contours:
         area = cv2.contourArea(cnt)
         if area>5000:
@@ -102,14 +102,14 @@ while True:
     biggest = getContours(imgThres)
     if biggest.size !=0:
         imgWarped=getWarp(img,biggest)
-        # imageArray = ([img,imgThres],
-        #           [imgContour,imgWarped])
-        imageArray = ([imgContour, imgWarped])
+        imageArray = ([img,imgThres],
+                  [imgContour,imgWarped])
+        # imageArray = ([imgContour, imgWarped])
         cv2.imshow("ImageWarped", imgWarped)
     else:
         # imageArray = ([img, imgThres],
         #               [img, img])
-        imageArray = ([imgContour, img])
+        imageArray = ([img, imgThres])
 
     stackedImages = stackImages(0.6,imageArray)
     cv2.imshow("WorkFlow", stackedImages)
